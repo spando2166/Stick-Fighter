@@ -1,26 +1,17 @@
-﻿using System.Collections;
-using System.Collections.Generic;
+﻿using System;
 using UnityEngine;
 
 public class InputController : MonoBehaviour
 {
-    // key-down variables
-    bool left;
-    bool right;
-    bool up;
-    bool hdup;
-    bool down;
+    InputData inputs;
 
-    // direction variable
-    string direction = "";
+    // helper variable
     string prev = "";
 
     // timing variables
     float timeSinceLeft;
     float timeSinceRight;
     float dashWindow = 0.2f;
-    bool doubleR;
-    bool doubleL;
 
     private void Start()
     {
@@ -30,29 +21,29 @@ public class InputController : MonoBehaviour
 
     void Update()
     {
-        prev = direction;
+        prev = inputs.direction;
 
         //----------------------------
         // GET DIRECTION
         //----------------------------
 
-        if (Input.GetKey(KeyCode.S) && Input.GetKey(KeyCode.D))         direction = "downright";
-        else if (Input.GetKey(KeyCode.S) && Input.GetKey(KeyCode.A))    direction = "downleft";
-        else if (Input.GetKey(KeyCode.W) && Input.GetKey(KeyCode.D))    direction = "upright";
-        else if (Input.GetKey(KeyCode.W) && Input.GetKey(KeyCode.A))    direction = "upleft";
+        if (Input.GetKey(KeyCode.S) && Input.GetKey(KeyCode.D)) inputs.direction = "downright";
+        else if (Input.GetKey(KeyCode.S) && Input.GetKey(KeyCode.A)) inputs.direction = "downleft";
+        else if (Input.GetKey(KeyCode.W) && Input.GetKey(KeyCode.D)) inputs.direction = "upright";
+        else if (Input.GetKey(KeyCode.W) && Input.GetKey(KeyCode.A)) inputs.direction = "upleft";
         else if (Input.GetKey(KeyCode.A))
         {
-            if (prev == "right" && Input.GetKey(KeyCode.D)) direction = "right";
-            else                                            direction = "left";
+            if (prev == "right" && Input.GetKey(KeyCode.D)) inputs.direction = "right";
+            else inputs.direction = "left";
         }
         else if (Input.GetKey(KeyCode.D))
         {
-            if (prev == "left" && Input.GetKey(KeyCode.A))  direction = "left";
-            else                                            direction = "right";
+            if (prev == "left" && Input.GetKey(KeyCode.A)) inputs.direction = "left";
+            else inputs.direction = "right";
         }
-        else if (Input.GetKey(KeyCode.W))   direction = "up";
-        else if (Input.GetKey(KeyCode.S))   direction = "down";
-        else                                direction = "neutral";
+        else if (Input.GetKey(KeyCode.W)) inputs.direction = "up";
+        else if (Input.GetKey(KeyCode.S)) inputs.direction = "down";
+        else inputs.direction = "neutral";
 
         //----------------------------
         // GET KEY PRESS
@@ -60,50 +51,46 @@ public class InputController : MonoBehaviour
 
         if (Input.GetKeyDown(KeyCode.A))
         {
-            left = true;
-            doubleL = (Time.time - timeSinceLeft < dashWindow && prev == "neutral");
+            inputs.left = true;
+            inputs.doubleL = (Time.time - timeSinceLeft < dashWindow && prev == "neutral");
             timeSinceLeft = Time.time;
         }
         else
         {
-            left = false;
-            if (direction != "left") // if we're not holding left anymore, stop dashing
-                doubleL = false;
+            inputs.left = false;
+            if (inputs.direction != "left") // if we're not holding left anymore, stop dashing
+                inputs.doubleL = false;
         }
 
         if (Input.GetKeyDown(KeyCode.D))
         {
-            right = true;
-            doubleR = (Time.time - timeSinceRight < dashWindow && prev == "neutral");
+            inputs.right = true;
+            inputs.doubleR = (Time.time - timeSinceRight < dashWindow && prev == "neutral");
             timeSinceRight = Time.time;
         }
         else
         {
-            right = false;
-            if (direction != "right") // if we're not holding right anymore, stop dashing
-                doubleR = false;
+            inputs.right = false;
+            if (inputs.direction != "right") // if we're not holding right anymore, stop dashing
+                inputs.doubleR = false;
         }
 
-        if (Input.GetKeyDown(KeyCode.W))    up = true;
-        else                                up = false;
+        if (Input.GetKeyDown(KeyCode.W)) inputs.up = true;
+        else inputs.up = false;
 
-        if (Input.GetKey(KeyCode.W))    hdup = true;
-        else                            hdup = false;
+        if (Input.GetKey(KeyCode.W)) inputs.hdup = true;
+        else inputs.hdup = false;
 
-        if (Input.GetKeyDown(KeyCode.S))    down = true;
-        else                                down = false;
+        if (Input.GetKeyDown(KeyCode.S)) inputs.down = true;
+        else inputs.down = false;
     }
 
     //----------------------------
     // PUBLIC ACCESS FUNTIONS
     //----------------------------
 
-    public string giveDir ()        {return direction;}
-    public bool isPosLeft()         {return left;}
-    public bool isPosRight()        {return right;}
-    public bool isPosUp()           {return up;}
-    public bool isHoldUp()          {return hdup;}
-    public bool isPosDown()         {return down;}
-    public bool isDoubleLeft()      {return doubleL;}
-    public bool isDoubleRight()     {return doubleR;}
+    public InputData GetControllerInputs()
+    {
+        return inputs;
+    }
 }

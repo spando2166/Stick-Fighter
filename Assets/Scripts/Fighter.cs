@@ -1,6 +1,4 @@
 ﻿using System;
-using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 
 public class Fighter : MonoBehaviour
@@ -14,25 +12,14 @@ public class Fighter : MonoBehaviour
     [SerializeField] float decelRate = 0.5f;
 
     // conditional variables
-    bool airborne =     new bool();
-    bool stunned =      new bool();
-    bool blocking =     new bool();
-    bool attacking =    new bool();
-    bool dashing =      new bool();
-    bool airdash =      new bool();
-    bool bairdash =     new bool();
-    bool bdashing =     new bool();
-    bool walking =      new bool();
-    bool bwalking =     new bool();
-    bool crouching =    new bool();
-    bool jumping =      new bool();
+
 
     // placeholder variables
     Vector2 speed;
 
     // cache variables
     Rigidbody2D gameBody;
-    InputController buttons;
+    InputController inputController;
     [SerializeField] Animator animator;
 
     // action function delegate
@@ -40,17 +27,22 @@ public class Fighter : MonoBehaviour
     ActionDelegate act;
     float timer;
 
+    // input and state data
+    InputData inputs;
+    StateData state;
+
     // Start is called before the first frame update
     void Start()
     {
         gameBody = GetComponent<Rigidbody2D>();
-        buttons = FindObjectOfType<InputController>();
+        inputController = FindObjectOfType<InputController>();
     }
 
     // Update is called once per frame
     void Update()
     {
         speed = gameBody.velocity;
+        inputs = inputController.GetControllerInputs();
 
         if (timer > 0)
         {
@@ -59,41 +51,41 @@ public class Fighter : MonoBehaviour
         }
         else
         {
-            if (airborne)
+            if (state.airborne)
             {
-                if (buttons.isDoubleRight() && !airdash)        airDashRight();
-                else if (buttons.isDoubleLeft() && !bairdash)   airDashLeft();
+                if (inputs.doubleR && !state.airdash)         airDashRight();
+                else if (inputs.doubleL && !state.bairdash)   airDashLeft();
             }
             else
             {
-                if (buttons.isHoldUp()) jump();
-                else if (buttons.giveDir() == "down" ||
-                    buttons.giveDir() == "downright" ||
-                    buttons.giveDir() == "downleft")
+                if (inputs.hdup) jump();
+                else if (inputs.direction == "down" ||
+                        inputs.direction == "downright" ||
+                        inputs.direction == "downleft")
                 {
                     setMovement("crouch");
                     halt();
                 }
-                else if (buttons.isDoubleRight())
+                else if (inputs.doubleR)
                 {
-                    if (!dashing)
+                    if (!state.dashing)
                     {
                         lock_movement(5f, dashRight);
                         setMovement("dash");
                     }
                     dashRight();
                 }
-                else if (buttons.giveDir() == "right") walkRight();
-                else if (buttons.isDoubleLeft())
+                else if (inputs.direction == "right") walkRight();
+                else if (inputs.doubleL)
                 {
-                    if (!dashing)
+                    if (!state.dashing)
                     {
                         lock_movement(5f, dashLeft);
                         setMovement("bdash");
                     }
                     dashLeft();
                 }
-                else if (buttons.giveDir() == "left") walkLeft();
+                else if (inputs.direction == "left") walkLeft();
                 else
                 {
                     setMovement("none");
@@ -103,7 +95,7 @@ public class Fighter : MonoBehaviour
         }
 
         // handle the animator
-        updateAnimation();
+        RenderCurrentFrame();
     }
 
     //----------------------------
@@ -115,7 +107,7 @@ public class Fighter : MonoBehaviour
         if (collision.gameObject.tag == "Floor")
         {
             setMovement("none");
-            airborne = false;
+            state.airborne = false;
         }
     }
 
@@ -126,23 +118,23 @@ public class Fighter : MonoBehaviour
     private void jump()
     {
         setMovement("jump");
-        if (buttons.giveDir() == "up")
+        if (inputs.direction == "up")
         {
             speed.x = 0f;
             speed.y = 10f;
         }
-        else if (buttons.giveDir() == "upright")
+        else if (inputs.direction == "upright")
         {
             if (orientation() == 'L') speed.x = 3f;
             speed.y = 10f;
         }
-        else if (buttons.giveDir() == "upleft")
+        else if (inputs.direction == "upleft")
         {
             if (orientation() == 'R') speed.x = -3f;
             speed.y = 10f;
         }
         gameBody.velocity = speed;
-        airborne = true;
+        state.airborne = true;
     }
 
     private void setXSpeed(float val)
@@ -265,16 +257,16 @@ public class Fighter : MonoBehaviour
     // ANIMATION
     //----------------------------
 
-    private void updateAnimation()
+    private void RenderCurrentFrame()
     {
-        if (walking) animator.SetBool("isWalking", true); else animator.SetBool("isWalking", false);
-        if (bwalking) animator.SetBool("isBackWalk", true); else animator.SetBool("isBackWalk", false);
-        if (dashing) animator.SetBool("isDashing", true); else animator.SetBool("isDashing", false);
-        if (bdashing) animator.SetBool("isBackDash", true); else animator.SetBool("isBackDash", false);
-        if (crouching) animator.SetBool("isCrouching", true); else animator.SetBool("isCrouching", false);
-        if (jumping) animator.SetBool("isJumping", true); else animator.SetBool("isJumping", false);
-        if (airdash) animator.SetBool("isAirDash", true); else animator.SetBool("isAirDash", false);
-        if (bairdash) animator.SetBool("isBairDash", true); else animator.SetBool("isBairDash", false);
+        if (state.walking) animator.SetBool("isWalking", true); else animator.SetBool("isWalking", false);
+        if (state.bwalking) animator.SetBool("isBackWalk", true); else animator.SetBool("isBackWalk", false);
+        if (state.dashing) animator.SetBool("isDashing", true); else animator.SetBool("isDashing", false);
+        if (state.bdashing) animator.SetBool("isBackDash", true); else animator.SetBool("isBackDash", false);
+        if (state.crouching) animator.SetBool("isCrouching", true); else animator.SetBool("isCrouching", false);
+        if (state.jumping) animator.SetBool("isJumping", true); else animator.SetBool("isJumping", false);
+        if (state.airdash) animator.SetBool("isAirDash", true); else animator.SetBool("isAirDash", false);
+        if (state.bairdash) animator.SetBool("isBairDash", true); else animator.SetBool("isBairDash", false);
     }
 
     //----------------------------
@@ -304,13 +296,13 @@ public class Fighter : MonoBehaviour
     // we set our movement so that only one move can be true
     private void setMovement(string move)
     {
-        if (String.Equals(move, "walk")) walking = true; else walking = false;
-        if (String.Equals(move, "bwalk")) bwalking = true; else bwalking = false;
-        if (String.Equals(move, "dash")) dashing = true; else dashing = false;
-        if (String.Equals(move, "bdash")) bdashing = true; else bdashing = false;
-        if (String.Equals(move, "crouch")) crouching = true; else crouching = false;
-        if (String.Equals(move, "jump")) jumping = true; else jumping = false;
-        if (String.Equals(move, "adash")) airdash = true; else airdash = false;
-        if (String.Equals(move, "badash")) bairdash = true; else bairdash = false;
+        if (String.Equals(move, "walk")) state.walking = true; else state.walking = false;
+        if (String.Equals(move, "bwalk")) state.bwalking = true; else state.bwalking = false;
+        if (String.Equals(move, "dash")) state.dashing = true; else state.dashing = false;
+        if (String.Equals(move, "bdash")) state.bdashing = true; else state.bdashing = false;
+        if (String.Equals(move, "crouch")) state.crouching = true; else state.crouching = false;
+        if (String.Equals(move, "jump")) state.jumping = true; else state.jumping = false;
+        if (String.Equals(move, "adash")) state.airdash = true; else state.airdash = false;
+        if (String.Equals(move, "badash")) state.bairdash = true; else state.bairdash = false;
     }
 }
