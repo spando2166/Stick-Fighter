@@ -4,21 +4,33 @@ using UnityEngine;
 public class Fighter : MonoBehaviour
 {
     // state variables
-    [SerializeField] int hitPoints = 100;
-    [SerializeField] float walkSpeed = 3f;
-    [SerializeField] float runSpeed = 10f;
-    [SerializeField] float airDashSpeed = 5f;
-    [SerializeField] float accelRate = 2f;
-    [SerializeField] float decelRate = 0.5f;
+    // [SerializeField] int hitPoints = 100;
+    [SerializeField] float f_walkSpeed = 3f;
+    [SerializeField] float f_runSpeed = 8f;
+    [SerializeField] float f_jumpSpeed = 10f;
+    [SerializeField] float f_airDashSpeed = 5f;
+    [SerializeField] float f_accelRate = 20f;
+    [SerializeField] float f_decelRate = 10f;
+    [SerializeField] Fix64 border_l = (Fix64)0.75f;
+    [SerializeField] Fix64 border_r = (Fix64)15.75f;
+    [SerializeField] Fix64 border_b = (Fix64)1.5f;
+    [SerializeField] Fix64 border_t = (Fix64)10.5f;
 
-    // conditional variables
-
+    Fix64 time_delta = (Fix64)(1f/60f);
+    Fix64 walkSpeed;
+    Fix64 runSpeed;
+    Fix64 jumpSpeed;
+    Fix64 airDashSpeed;
+    Fix64 accelRate;
+    Fix64 decelRate;
 
     // placeholder variables
-    Vector2 speed;
+    FixVector2D pos;
+    FixVector2D pos_delta = new FixVector2D(Fix64.Zero, Fix64.Zero);
+    FixVector2D velocity = new FixVector2D(Fix64.Zero, Fix64.Zero);
+    Fix64 max_accel = (Fix64)10000f;
 
     // cache variables
-    Rigidbody2D gameBody;
     InputController inputController;
     [SerializeField] Animator animator;
 
@@ -34,14 +46,20 @@ public class Fighter : MonoBehaviour
     // Start is called before the first frame update
     void Start()
     {
-        gameBody = GetComponent<Rigidbody2D>();
+        walkSpeed =       (Fix64)f_walkSpeed;
+        runSpeed =        (Fix64)f_runSpeed;
+        jumpSpeed =       (Fix64)f_jumpSpeed;
+        airDashSpeed =    (Fix64)f_airDashSpeed;
+        accelRate =       (Fix64)f_accelRate;
+        decelRate =       (Fix64)f_decelRate;
+
         inputController = FindObjectOfType<InputController>();
     }
 
     // Update is called once per frame
     void Update()
     {
-        speed = gameBody.velocity;
+        StorePosition();
         inputs = inputController.GetControllerInputs();
 
         if (timer > 0)
@@ -53,46 +71,53 @@ public class Fighter : MonoBehaviour
         {
             if (state.airborne)
             {
-                if (inputs.doubleR && !state.airdash)         airDashRight();
-                else if (inputs.doubleL && !state.bairdash)   airDashLeft();
+                Fall(decelRate);
+                //if (inputs.doubleR && !state.airdash) airDashRight();
+                //else if (inputs.doubleL && !state.bairdash) airDashLeft();
             }
             else
             {
-                if (inputs.hdup) jump();
+                if (inputs.hdup)
+                {
+                    Jump();
+                }
                 else if (inputs.direction == "down" ||
                         inputs.direction == "downright" ||
                         inputs.direction == "downleft")
                 {
-                    setMovement("crouch");
-                    halt();
+                    SetMovement("crouch");
+                    Halt();
                 }
                 else if (inputs.doubleR)
                 {
                     if (!state.dashing)
                     {
-                        lock_movement(5f, dashRight);
-                        setMovement("dash");
+                        LockMovement(5f, DashRight);
+                        SetMovement("dash");
                     }
-                    dashRight();
+                    DashRight();
                 }
-                else if (inputs.direction == "right") walkRight();
+                else if (inputs.direction == "right") WalkRight();
                 else if (inputs.doubleL)
                 {
                     if (!state.dashing)
                     {
-                        lock_movement(5f, dashLeft);
-                        setMovement("bdash");
+                        LockMovement(5f, DashLeft);
+                        SetMovement("bdash");
                     }
-                    dashLeft();
+                    DashLeft();
                 }
-                else if (inputs.direction == "left") walkLeft();
+                else if (inputs.direction == "left") WalkLeft();
                 else
                 {
-                    setMovement("none");
-                    halt();
+                    SetMovement("none");
+                    Halt();
                 }
             }
         }
+
+        // get the change in our positions
+        SetDelta();
 
         // handle the animator
         RenderCurrentFrame();
@@ -106,86 +131,109 @@ public class Fighter : MonoBehaviour
     {
         if (collision.gameObject.tag == "Floor")
         {
-            setMovement("none");
+            SetMovement("none");
             state.airborne = false;
         }
+    }
+
+    private void StorePosition()
+    {
+        pos.X = (Fix64)transform.position.x;
+        pos.Y = (Fix64)transform.position.y;
+    }
+
+    private void SetDelta()
+    {
+        pos_delta.X = (Fix64)transform.position.x - pos.X;
+        pos_delta.Y = (Fix64)transform.position.y - pos.Y;
     }
 
     //----------------------------
     // MOVEMENT
     //----------------------------
-
-    private void jump()
+    
+    private void Jump()
     {
-        setMovement("jump");
-        if (inputs.direction == "up")
-        {
-            speed.x = 0f;
-            speed.y = 10f;
-        }
-        else if (inputs.direction == "upright")
-        {
-            if (orientation() == 'L') speed.x = 3f;
-            speed.y = 10f;
-        }
-        else if (inputs.direction == "upleft")
-        {
-            if (orientation() == 'R') speed.x = -3f;
-            speed.y = 10f;
-        }
-        gameBody.velocity = speed;
+        SetMovement("jump");
+
+        // if this is the first time, give the intial velocities
+        velocity.Y = jumpSpeed;
+
+        if (inputs.direction == "upright" && !AdvancingRight())
+            velocity.X = (Fix64)3f;
+        else if (inputs.direction == "upleft" && AdvancingRight())
+            velocity.X = (Fix64)(-3f);
+
         state.airborne = true;
     }
 
-    private void setXSpeed(float val)
+    private void Fall(Fix64 decel)
     {
-        speed.x = val;
-        gameBody.velocity = speed;
+        // get the velocity after deceleration
+        if (velocity.Y - (decel * time_delta) > -jumpSpeed)
+            velocity.Y -= decel * time_delta;
+        else
+            velocity.Y = -jumpSpeed;
+
+        float y_distance = Mathf.Clamp((float)(velocity.Y * time_delta), (float)(border_b - pos.Y), (float)(border_t - pos.Y));
+        float x_distance = Mathf.Clamp((float)(velocity.X * time_delta), (float)(border_l - pos.X), (float)(border_r - pos.X));
+
+        if ((Fix64)y_distance == border_b - pos.Y)
+            state.airborne = false;
+
+        transform.position += (Vector3.right * x_distance) + (Vector3.up * y_distance);
     }
 
-    private void addXSpeed(float val)
+    /*
+private void setXSpeed(float val)
+{
+   pos.x = val;
+   gameBody.velocity = pos;
+}
+
+private void addXSpeed(float val)
+{
+   pos.x += val;
+   gameBody.velocity = pos;
+}
+
+private void setYSpeed(float val)
+{
+   pos.y = val;
+   gameBody.velocity = pos;
+}
+
+private void addYSpeed(float val)
+{
+   pos.y += val;
+   gameBody.velocity = pos;
+}
+*/
+    private void WalkRight()
     {
-        speed.x += val;
-        gameBody.velocity = speed;
+        AccelerateRight(walkSpeed, max_accel);
+        SetMovement("walk");
     }
 
-    private void setYSpeed(float val)
+    private void WalkLeft()
     {
-        speed.y = val;
-        gameBody.velocity = speed;
+        AccelerateLeft(walkSpeed, max_accel);
+        SetMovement("bwalk");
     }
 
-    private void addYSpeed(float val)
+    private void DashRight()
     {
-        speed.y += val;
-        gameBody.velocity = speed;
+        AccelerateRight(runSpeed, accelRate);
     }
 
-    private void walkRight()
+    private void DashLeft()
     {
-        setXSpeed(walkSpeed);
-        setMovement("walk");
+        AccelerateLeft(runSpeed, accelRate);
     }
-
-    private void walkLeft()
-    {
-        setXSpeed(-walkSpeed);
-        setMovement("bwalk");
-    }
-
-    private void dashRight()
-    {
-        accelerateRight(runSpeed, accelRate);
-    }
-
-    private void dashLeft()
-    {
-        accelerateLeft(runSpeed, accelRate);
-    }
-
+    /*
     private void airDashRight()
     {
-        if (speed.x >= airDashSpeed)    addXSpeed(airDashSpeed);
+        if (pos.x >= airDashSpeed)    addXSpeed(airDashSpeed);
         else                            setXSpeed(runSpeed);
         setYSpeed(1f);
         setMovement("adash");
@@ -193,64 +241,75 @@ public class Fighter : MonoBehaviour
 
     private void airDashLeft()
     {
-        if (speed.x <= -airDashSpeed)    addXSpeed(-airDashSpeed);
+        if (pos.x <= -airDashSpeed)    addXSpeed(-airDashSpeed);
         else                            setXSpeed(-runSpeed);
         setYSpeed(1f);
         setMovement("badash");
     }
+    */
 
-    private void halt()
+    private void Halt()
     {
-        if (orientation() == 'R') decelerateRight(decelRate);
-        if (orientation() == 'L') decelerateLeft(decelRate);
+        if (AdvancingRight())   DecelerateRight(decelRate);
+        else                    DecelerateLeft(decelRate);
     }
 
-    private void accelerateRight(float fvelocity, float accel)
+    private void AccelerateRight(Fix64 fvelocity, Fix64 accel)
     {
-        // if we have reached the desired speed, stop acceleration
-        if (gameBody.velocity.x >= fvelocity) return;
+        // get the new velocity
+        Fix64 new_velocity = velocity.X + (accel * time_delta);
 
-        // otherwise, accelerate
-        if (speed.x + accel >= fvelocity) speed.x = fvelocity;
-        else speed.x += accel;
+        // get the velocity after acceleration (cannot exceed fvelocity)
+        if (new_velocity < Fix64.Zero)
+            velocity.X = Fix64.Zero;
+        else if (new_velocity >= fvelocity)
+            velocity.X = fvelocity;
+        else
+            velocity.X = new_velocity;
 
-        gameBody.velocity = speed;
+        float distance = Mathf.Clamp((float)(velocity.X * time_delta), (float)(border_l - pos.X), (float)(border_r - pos.X));
+        transform.position += Vector3.right * distance;
     }
 
-    private void accelerateLeft(float fvelocity, float accel)
+    private void AccelerateLeft(Fix64 fvelocity, Fix64 accel)
     {
-        // if we have reached the desired speed, stop acceleration
-        if (gameBody.velocity.x <= -fvelocity) return;
+        // get the new velocity
+        Fix64 new_velocity = velocity.X - (accel * time_delta);
 
-        // otherwise, accelerate
-        if (speed.x - accel <= -fvelocity) speed.x = -fvelocity;
-        else speed.x -= accel;
+        // get the velocity after acceleration (cannot exceed -fvelocity)
+        if (new_velocity > Fix64.Zero)
+            velocity.X = Fix64.Zero;
+        else if (new_velocity <= -fvelocity)
+            velocity.X = -fvelocity;
+        else
+            velocity.X = new_velocity;
 
-        gameBody.velocity = speed;
+        float distance = Mathf.Clamp((float)(velocity.X * time_delta), (float)(border_l - pos.X), (float)(border_r - pos.X));
+        transform.position += Vector3.right * distance;
     }
 
-    private void decelerateRight(float decel)
+    private void DecelerateRight(Fix64 decel)
     {
-        // if we have reached the desired speed, stop acceleration
-        if (gameBody.velocity.x <= 0) return;
+        // get the velocity after deceleration
+        if (velocity.X > (decel * time_delta))
+            velocity.X -= decel * time_delta;
+        else
+            velocity.X = Fix64.Zero;
 
-        // otherwise, accelerate
-        if (speed.x - decel <= 0) speed.x = 0;
-        else speed.x -= decel;
-
-        gameBody.velocity = speed;
+        float distance = Mathf.Clamp((float)(velocity.X * time_delta), (float)(border_l - pos.X), (float)(border_r - pos.X));
+        transform.position += Vector3.right * distance;
     }
 
-    private void decelerateLeft(float decel)
+    private void DecelerateLeft(Fix64 decel)
     {
-        // if we have reached the desired speed, stop acceleration
-        if (gameBody.velocity.x >= 0) return;
+        // get the velocity after deceleration
+        if (velocity.X < (-decel * time_delta))
+            velocity.X += decel * time_delta;
+        else
+            velocity.X = Fix64.Zero;
 
-        // otherwise, accelerate
-        if (speed.x + decel >= 0) speed.x = 0;
-        else speed.x += decel;
-
-        gameBody.velocity = speed;
+        float distance = Mathf.Clamp((float)(velocity.X * time_delta), (float)(border_l - pos.X), (float)(border_r - pos.X));
+        transform.position += Vector3.right * distance;
     }
 
     //----------------------------
@@ -275,26 +334,28 @@ public class Fighter : MonoBehaviour
 
     // lock movement for specified number of frames
     // sets an action to continue under movement lock
-    public void lock_movement(float amt, ActionDelegate tmp)
+    public void LockMovement(float amt, ActionDelegate tmp)
     {
         timer = amt;
         act = tmp;
     }
 
     // tells if object is currently moving left or right
-    private char orientation()
+    private bool AdvancingRight()
     {
-        return gameBody.velocity.x > 0 ? 'R' : 'L';
+        if (pos_delta.X >= (Fix64)0)
+            return true;
+        return false;
     }
 
     // we can set our act delegate to do no action
-    private void nothing()
+    private void Nothing()
     {
         return;
     }
 
     // we set our movement so that only one move can be true
-    private void setMovement(string move)
+    private void SetMovement(string move)
     {
         if (String.Equals(move, "walk")) state.walking = true; else state.walking = false;
         if (String.Equals(move, "bwalk")) state.bwalking = true; else state.bwalking = false;
